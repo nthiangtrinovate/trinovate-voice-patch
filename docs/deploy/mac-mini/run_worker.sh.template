@@ -1,0 +1,70 @@
+#!/usr/bin/env bash
+# Launch script for the voice-word-editor Mac mini worker.
+# Invoked by com.example.voice-word-editor-worker.plist. Rename to
+# run_worker.sh, fill in the WORKER_HOME placeholder, and confirm the
+# venv/checkpoint paths below match what's actually on the Mac mini.
+#
+# Real entrypoint confirmed by model-feasibility (worker/README.md,
+# verified end to end against a live portal instance): `worker/run_worker.py`
+# itself is stdlib-only (urllib/json/subprocess/tempfile — no venv of its
+# own needed), but it shells out to TWO SEPARATE heavy-ML venvs for the
+# STT and cloning stages (their pinned deps conflict — see
+# worker/README.md "Why two venvs"). Point STT_VENV_PYTHON/TTS_VENV_PYTHON
+# at the two venvs Phase 1 already built and validated under
+# FEASIBILITY_HOME on the Mac mini — no reinstall needed if those are
+# still in place.
+#
+# Constraints this script must respect (PLAN.md):
+#  - Outbound-only: never start anything that binds a listening socket.
+#    worker/run_worker.py itself never does; this script doesn't either.
+#  - Isolated dependencies: the two ML venvs are project-local (under
+#    FEASIBILITY_HOME, not system Python/brew-wide) — mirrors the existing
+#    ~/nmt-studio precedent on this same Mac mini for a different project.
+#  - Limited concurrency: don't disturb the user's existing Mac mini
+#    workloads (Ollama etc. already share this machine per PLAN.md
+#    environment facts) — worker/run_worker.py processes one job at a
+#    time, by design, never spawning unbounded parallel subprocess work.
+#  - No secrets in logs: never `echo`/print the worker-auth token or job
+#    content; read the token from file, export it only as an env var the
+#    Python process reads directly — never pass it as a CLI argument
+#    (would be visible in `ps`/process listings).
+
+set -euo pipefail
+
+WORKER_HOME="<<<WORKER_HOME_PLACEHOLDER>>>"
+TOKEN_FILE="${VOICE_WORD_EDITOR_WORKER_TOKEN_FILE:-${WORKER_HOME}/config/worker_auth_token}"
+
+if [[ ! -f "${TOKEN_FILE}" ]]; then
+    echo "worker auth token file not found at ${TOKEN_FILE} — see docs/deployment-notes.md" >&2
+    exit 1
+fi
+
+# Exported, never echoed/printed — worker/run_worker.py reads this
+# directly from its environment (see its _load_token()).
+export PORTAL_WORKER_TOKEN
+PORTAL_WORKER_TOKEN="$(cat "${TOKEN_FILE}")"
+
+# Required: where the portal server actually is (set by the plist's
+# VOICE_WORD_EDITOR_SERVER_URL env var — translate it to the name
+# worker/run_worker.py expects).
+export PORTAL_BASE_URL="${VOICE_WORD_EDITOR_SERVER_URL:?set VOICE_WORD_EDITOR_SERVER_URL in the plist}"
+
+# Everything below has a working default in worker/README.md pointing at
+# the exact Phase 1 venvs/checkpoints already built on the Mac mini
+# (under ~/voice-word-editor-feasibility by default) — override here only
+# if this deployment's layout differs. Set FFMPEG_BIN explicitly: a
+# launchd agent's PATH is minimal and usually won't find a user-installed
+# ffmpeg on its own.
+# export FEASIBILITY_HOME="<<<FEASIBILITY_HOME_PLACEHOLDER (default: ~/voice-word-editor-feasibility)>>>"
+# export STT_VENV_PYTHON="<<<optional override — default: \$FEASIBILITY_HOME/stt-venv/bin/python>>>"
+# export TTS_VENV_PYTHON="<<<optional override — default: \$FEASIBILITY_HOME/tts-venv/bin/python>>>"
+# export OPENVOICE_CHECKPOINTS_DIR="<<<optional override — default: \$FEASIBILITY_HOME/checkpoints_v2>>>"
+# export WORKER_SCRATCH_DIR="<<<optional override — default: \$FEASIBILITY_HOME/worker_jobs>>>"
+export FFMPEG_BIN="<<<FFMPEG_BIN_PLACEHOLDER (full path — e.g. /opt/homebrew/bin/ffmpeg or wherever Phase 1's isolated ffmpeg lives)>>>"
+export PORTAL_WORKER_ID="${PORTAL_WORKER_ID:-mac-mini-worker-1}"
+
+WORKER_PY="<<<WORKER_REPO_CHECKOUT_PLACEHOLDER>>>/worker/run_worker.py"
+
+# plain python3 — run_worker.py itself needs no venv (stdlib only); the
+# two heavy ML venvs above are what actually need isolation.
+exec python3 "${WORKER_PY}" --base-url "${PORTAL_BASE_URL}" --worker-id "${PORTAL_WORKER_ID}"

@@ -1,0 +1,17 @@
+# Never commit model weights, venvs, caches, or generated audio from running
+# these scripts — they're large, regenerable, and (for audio) not something
+# we want sitting in git history. See README.md.
+*.venv/
+venv/
+*-venv/
+checkpoints*/
+openvoice_src/
+melotts_src/
+*.tar.gz
+assets/
+outputs/
+*.wav
+*.aiff
+*.mp3
+__pycache__/
+*.pyc

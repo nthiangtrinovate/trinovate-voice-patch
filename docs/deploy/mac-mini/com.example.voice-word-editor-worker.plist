@@ -1,0 +1,78 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+launchd agent for the voice-word-editor Mac mini worker.
+
+Critical constraint from PLAN.md: this worker is OUTBOUND-ONLY. It polls the
+server and pushes results over connections IT initiates — it must never bind
+a listening socket reachable from the LAN/internet. This plist intentionally
+has no Sockets key and the run_worker.sh it launches must never open a
+server socket. If a future change adds one, flag it immediately — that
+would violate an explicit PLAN.md guardrail.
+
+Install (on the worker machine, as the user that will run it — no sudo
+needed for a per-user LaunchAgent). Rename the Label and this file to
+your own reverse-DNS identifier before installing, then:
+  cp com.example.voice-word-editor-worker.plist ~/Library/LaunchAgents/
+  launchctl bootstrap gui/$(id -u) ~/Library/LaunchAgents/com.example.voice-word-editor-worker.plist
+
+Stop/disable:
+  launchctl bootout gui/$(id -u)/com.example.voice-word-editor-worker
+
+Reload after editing (bootstrap alone does not pick up changes to an
+already-loaded plist):
+  launchctl bootout gui/$(id -u)/com.example.voice-word-editor-worker
+  launchctl bootstrap gui/$(id -u) ~/Library/LaunchAgents/com.example.voice-word-editor-worker.plist
+
+Deployed layout: code checked out under the worker user's home directory
+(e.g. ~/voice-word-editor), worker token read from a local file (mode
+600, never inlined in this plist — plists are plain XML, readable by
+anything with filesystem access). Replace every <<<...>>> placeholder
+below with your own values before installing.
+-->
+<plist version="1.0">
+<dict>
+    <key>Label</key>
+    <string>com.example.voice-word-editor-worker</string>
+
+    <key>ProgramArguments</key>
+    <array>
+        <string>&lt;&lt;&lt;ABSOLUTE_PATH_TO_RUN_WORKER_SH&gt;&gt;&gt;</string>
+    </array>
+
+    <key>RunAtLoad</key>
+    <true/>
+    <key>KeepAlive</key>
+    <dict>
+        <key>SuccessfulExit</key>
+        <false/>
+    </dict>
+
+    <key>StandardOutPath</key>
+    <string>&lt;&lt;&lt;ABSOLUTE_PATH_TO_WORKER_LOG&gt;&gt;&gt;</string>
+    <key>StandardErrorPath</key>
+    <string>&lt;&lt;&lt;ABSOLUTE_PATH_TO_WORKER_LOG&gt;&gt;&gt;</string>
+    <!-- Logs must never contain the worker-auth token, job content
+         previews with sensitive text, or admin credentials — PLAN.md: no
+         secrets in logs, ever. worker/run_worker.py's logging statements
+         were written (and re-checked) to log outcomes/identifiers only. -->
+
+    <key>EnvironmentVariables</key>
+    <dict>
+        <key>VOICE_WORD_EDITOR_SERVER_URL</key>
+        <string>&lt;&lt;&lt;http://YOUR-PORTAL-HOST:PORT&gt;&gt;&gt;</string>
+        <!-- The worker-auth token itself is intentionally NOT inlined here.
+             run_worker.sh reads it from this 600-mode local file instead. -->
+        <key>VOICE_WORD_EDITOR_WORKER_TOKEN_FILE</key>
+        <string>&lt;&lt;&lt;ABSOLUTE_PATH_TO_WORKER_TOKEN_FILE&gt;&gt;&gt;</string>
+        <key>PORTAL_WORKER_ID</key>
+        <string>mac-mini-worker-1</string>
+    </dict>
+
+    <!-- No Sockets key: this agent is launched, it dials out, it never
+         listens. Do not add one without re-checking the PLAN.md
+         outbound-only guardrail and flagging the coordinator. -->
+
+    <key>ProcessType</key>
+    <string>Background</string>
+</dict>
+</plist>

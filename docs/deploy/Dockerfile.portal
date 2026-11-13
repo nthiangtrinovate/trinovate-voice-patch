@@ -1,0 +1,33 @@
+# Dockerfile for the voice-word-editor portal backend (Python/FastAPI, see
+# docs/portal-notes.md). Build context is the `portal/` directory:
+#   docker build -f docs/deploy/Dockerfile.portal -t voice-word-editor-portal:latest portal/
+#
+# Persistent data (sqlite db, uploads, outputs) is NOT baked into the image —
+# mount a host directory at /data and set PORTAL_DATA_DIR=/data at runtime.
+# Secrets (PORTAL_WORKER_TOKEN, a non-default PORTAL_DEFAULT_ADMIN_PASSWORD)
+# are injected via --env-file at `docker run` time, never baked in here.
+
+FROM python:3.12-slim
+
+# Run as a non-root user — matches the security precedent used elsewhere in
+# this org's deployments ("run containers as non-root and limit host
+# mounts").
+RUN useradd --create-home --uid 10001 portal
+WORKDIR /app
+
+COPY requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt
+
+COPY . .
+
+# Never bake secrets (admin seed password, worker-auth signing key, DB
+# credentials) into the image — inject at runtime via environment variables
+# or a mounted secrets file, and never log them (PLAN.md: no secrets in
+# logs, ever).
+ENV PORT=8000
+EXPOSE 8000
+
+RUN mkdir -p /data && chown portal:portal /data
+USER portal
+
+CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]

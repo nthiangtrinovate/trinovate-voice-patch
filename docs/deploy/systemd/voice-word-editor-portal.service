@@ -1,0 +1,48 @@
+# TEMPLATE systemd unit for the voice-word-editor portal backend, as a
+# non-Docker alternative to docs/deploy/Dockerfile.portal (use whichever
+# matches how/where portal-queue's code actually ends up running).
+#
+# Install (as a human with sudo on the target host):
+#   sudo cp voice-word-editor-portal.service /etc/systemd/system/
+#   sudo systemctl daemon-reload
+#   sudo systemctl enable --now voice-word-editor-portal
+#
+# <<<EXEC_START_PLACEHOLDER>>> — the real start command, once portal-queue's
+#   entrypoint is known (e.g. a venv python, a compiled binary, `node server.js`).
+# <<<APP_USER_PLACEHOLDER>>>   — a dedicated, unprivileged service account,
+#   not the interactive login user — isolate this app's filesystem access.
+# <<<APP_DIR_PLACEHOLDER>>>    — where the checked-out/deployed code lives on
+#   the target host.
+
+[Unit]
+Description=voice-word-editor portal backend
+After=network-online.target
+Wants=network-online.target
+StartLimitBurst=5
+StartLimitIntervalSec=60
+
+[Service]
+Type=simple
+User=<<<APP_USER_PLACEHOLDER>>>
+WorkingDirectory=<<<APP_DIR_PLACEHOLDER>>>
+ExecStart=<<<EXEC_START_PLACEHOLDER>>>
+Restart=always
+RestartSec=5
+TimeoutStopSec=30
+TimeoutStartSec=30
+
+# Hardening: no inbound exposure assumptions here — this unit just runs the
+# portal process; whether it's reachable depends entirely on the nginx vhost
+# (docs/deploy/nginx/) and firewall rules, which stay LAN-only by default.
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ReadWritePaths=<<<APP_DIR_PLACEHOLDER>>>
+
+# Secrets (admin seed password, worker-auth signing key, DB creds) belong in
+# an EnvironmentFile with mode 600, owned by <<<APP_USER_PLACEHOLDER>>> —
+# never inline here, never world-readable, never logged.
+# EnvironmentFile=<<<APP_DIR_PLACEHOLDER>>>/secrets.env
+
+[Install]
+WantedBy=multi-user.target

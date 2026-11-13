@@ -1,0 +1,88 @@
+{% extends "base.html" %}
+{% block title %}Job {{ job_id[:8] }} — Voice Patch{% endblock %}
+{% block content %}
+<div id="job-root" data-job-id="{{ job_id }}">
+  <div class="card">
+    <h1>Job {{ job_id[:8] }}</h1>
+    <ol class="stepper" id="stepper">
+      <li data-step="queued">Queued</li>
+      <li data-step="transcribing">Transcribing</li>
+      <li data-step="edit">Edit</li>
+      <li data-step="generating">Synthesizing voice</li>
+      <li data-step="blending">Blending audio</li>
+      <li data-step="exporting">Exporting video</li>
+      <li data-step="done">Done</li>
+    </ol>
+    <p>
+      <span class="badge state-{{ job.state }}" id="state-badge">{{ job.state }}</span>
+      <span id="stage-elapsed" class="muted"></span>
+      <span id="stage-estimate" class="muted"></span>
+    </p>
+    <p class="muted small">File: {{ job.input_filename }} ({{ job.input_duration_sec | round(1) }}s)</p>
+    <p class="muted small">Available until <strong>{{ job.expires_at[:10] }}</strong> (automatically deleted after that).</p>
+    <p class="muted small" id="engine-result-line" style="display:none"></p>
+    <div id="error-box" class="error" style="display:none"></div>
+    <form method="post" action="/jobs/{{ job_id }}/purge" class="inline-form"
+          onsubmit="return confirm('Permanently delete this job, its upload, and its result now? This cannot be undone.');">
+      <button type="submit" class="link-button" id="btn-purge" {% if job.claimed_active %}disabled{% endif %}>Purge this job now</button>
+    </form>
+    <p class="muted small" id="purge-hint" style="display:none">Actively processing — try again shortly.</p>
+  </div>
+
+  <div class="card">
+    <h2>Transcript &amp; run options</h2>
+    <p class="muted small" id="transcript-hint">
+      Waiting for the worker to transcribe this job...
+    </p>
+    <textarea id="transcript-text" rows="4" disabled></textarea>
+
+    <p class="muted small">Choose how to replace words and which voice engine to use below, then press Run — nothing is synthesized until you do.</p>
+    <label>Word-replacement mode
+      <select id="select-word-mode" disabled>
+        {% for mode_id, mode in word_replacement_modes.items() %}
+        <option value="{{ mode_id }}" {% if mode_id == job.word_replacement_mode %}selected{% endif %}>{{ mode.label }}</option>
+        {% endfor %}
+      </select>
+    </label>
+    <label>Voice engine
+      <select id="select-voice-model" disabled>
+        {% for model_id, model in voice_models.items() %}
+        <option value="{{ model_id }}" {% if model_id == job.voice_model %}selected{% endif %}>{{ model.label }}</option>
+        {% endfor %}
+      </select>
+    </label>
+    <label>Preset
+      <select id="select-voice-preset" disabled></select>
+    </label>
+    <p class="muted small" id="license-note" style="display:none"></p>
+
+    <div class="button-row">
+      <button id="btn-fruit" disabled>Random fruit replacement</button>
+      <button id="btn-submit-edit" disabled>Run &amp; start synthesis</button>
+    </div>
+    <p id="replacement-note" class="muted small"></p>
+  </div>
+  <script id="voice-models-data" type="application/json">{{ voice_models_json | safe }}</script>
+  <script id="license-notes-data" type="application/json">{{ license_notes_json | safe }}</script>
+
+  <div class="card">
+    <h2>Before / after</h2>
+    <div class="media-row">
+      <div>
+        <h3>Before</h3>
+        <video id="video-before" controls preload="metadata" src="/jobs/{{ job_id }}/media/original"></video>
+      </div>
+      <div>
+        <h3>After</h3>
+        <video id="video-after" controls preload="metadata"></video>
+        <p class="muted small" id="after-hint">Not ready yet.</p>
+      </div>
+    </div>
+    <p>
+      <a id="download-link" class="button-link disabled" href="#">Download result</a>
+      <a class="button-link" href="/">Upload another video</a>
+    </p>
+  </div>
+</div>
+<script src="/static/app.js"></script>
+{% endblock %}
