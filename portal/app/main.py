@@ -18,7 +18,7 @@ logging.basicConfig(
     format="%(asctime)s %(levelname)s %(name)s: %(message)s",
 )
 
-app = FastAPI(title="Voice Patch Portal")
+app = FastAPI(title="Trinovate Voice Patch Portal")
 
 app.mount(
     "/static",
